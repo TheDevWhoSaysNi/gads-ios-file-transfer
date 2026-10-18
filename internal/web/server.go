@@ -164,8 +164,8 @@ func subtleMatch(got, want string) bool {
 		return false
 	}
 	var diff byte
-	for i := 0; i < len(got); i++ {
-		diff |= got[i] ^ want[i]
+	for ni := 0; ni < len(got); ni++ {
+		diff |= got[ni] ^ want[ni]
 	}
 	return diff == 0
 }

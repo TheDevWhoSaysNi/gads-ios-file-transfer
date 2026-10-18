@@ -103,4 +103,4 @@ if platDev.GetOS() == "ios" {
 
 After that, any client of the hub can use the existing files push route. A custom web UI is optional. The GADS hub UI's Android upload hits the same route.
 
-This is the change to contribute back to [shamanec/GADS](https://github.com/shamanec/GADS). The app in this repo stays MIT. The provider patch, once merged, follows GADS's AGPL license.
+This is the change to contribute back to [shamanec/GADS](https://github.com/shamanec/GADS). This repo and that patch are both AGPL-3.0, the same license as GADS.

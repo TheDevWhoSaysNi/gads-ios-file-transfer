@@ -6,22 +6,65 @@ The phone needs the small app in [`ios/`](ios/) installed once. The first launch
 
 This does not depend on a particular web console, a Linux hub, or a Mac mini. The computer that has the USB cable runs the tool. That computer can be macOS, Linux, or Windows.
 
-## What you install on the phone
+## Build, sign, and install
 
-On a Mac, from `ios/`:
+You build the unsigned app on a Mac, sign it once, then install that same signed IPA on every phone. Signing does not put the app on the phones by itself.
+
+### 1. Build the unsigned IPA
+
+Use a Mac with full Xcode, not the Command Line Tools alone. `xcode-select -p` should point at `Xcode.app`.
 
 ```sh
+git clone https://github.com/TheDevWhoSaysNi/gads-ios-file-transfer.git
+cd gads-ios-file-transfer/ios
+chmod +x build-ipa.sh
 ./build-ipa.sh
 ```
 
-That writes `ios/GADSFileTransfer-unsigned.ipa`. Sign it with the same certificate and provisioning profile you already use for WebDriverAgent ([zsign](https://github.com/zhkl0228/zsign) is the usual tool). The profile has to include the phone, and the bundle id is `com.gads.filetransfer`.
+That writes `ios/GADSFileTransfer-unsigned.ipa`.
+
+### 2. Sign it once
+
+Use [zsign](https://github.com/zhlynn/zsign) **1.1.2 or newer**. Check with `zsign -v`. Older builds, including 0.7, print `Signed OK!` and still produce a signature iOS rejects. `Can't find CodeSignature segment` followed by `Realloc CodeSignature space` and `Success!` is normal.
+
+The password is the **.p12 export password**, not your Apple ID password.
+
+The certificate inside the `.p12` has to be one of the certificates inside the `.mobileprovision`. A development account often has several certificates that all display as `Apple Development: Your Name`. A profile made only for the WebDriverAgent bundle id cannot sign `com.gads.filetransfer`. A wildcard profile (`TEAMID.*`) can, if it contains the same certificate as the `.p12`.
 
 ```sh
-ios install --path=GADSFileTransfer-signed.ipa
-ios launch com.gads.filetransfer
+zsign \
+  -k cert.p12 \
+  -p 'P12_PASSWORD' \
+  -m profile.mobileprovision \
+  -o GADSFileTransfer.ipa \
+  -b com.gads.filetransfer \
+  GADSFileTransfer-unsigned.ipa
 ```
 
-Tap **Allow** when the phone asks to add to Photos. `ios` is [go-ios](https://github.com/danielpaulus/go-ios). On iOS 17 and newer, start its tunnel first (`ios tunnel start`) if GADS is not already running on that computer.
+Check the result before installing a fleet:
+
+```sh
+mkdir -p /tmp/gads-check
+unzip -q GADSFileTransfer.ipa -d /tmp/gads-check
+codesign --verify --deep --strict /tmp/gads-check/Payload/GADSFileTransfer.app
+codesign -d --verbose=2 /tmp/gads-check/Payload/GADSFileTransfer.app
+```
+
+`codesign --verify` should say the app is valid on disk. `codesign -d` should list three authorities: your Apple Development certificate, Apple Worldwide Developer Relations, and Apple Root CA. `Authority=(unavailable)` means the signature is not usable. Install error `0xe8008018` (`The identity used to sign the executable is no longer valid`) means the certificate that signed the app is not the certificate inside the profile, even when both names look the same. Sign again with the `.p12` that matches the profile.
+
+### 3. Install on every phone
+
+Copy `GADSFileTransfer.ipa` to each computer that has phones plugged in. Do not sign again on those computers.
+
+`ios` is [go-ios](https://github.com/danielpaulus/go-ios). Install uses lockdown and does not need `ios tunnel start`. A tunnel warning during install can be ignored.
+
+```sh
+ios install --path=GADSFileTransfer.ipa --udid=PHONE_UDID
+```
+
+Repeat for each UDID from `ios list` on that computer. Then open **GADS File Transfer** on the phone and tap **Allow** for Photos. That tap is once per phone.
+
+A phone whose UDID is missing from the provisioning profile is rejected. Add it to the profile, sign once more, and install that new IPA.
 
 ## Send a file
 
@@ -89,3 +132,9 @@ Do not point a second copy of this tool at a provider launch until the app is in
 The app comes to the front, copies new photos and videos into Photos, and leaves every file in its Files folder. With `--provider`, the phone then goes back to the home screen. Without a provider, switch back yourself. The page tells you where the file landed.
 
 Sending the same bytes again does not create a second Photos item. A changed file does.
+
+## License
+
+Copyright (C) 2026 TheDevWhoSaysNi.
+
+GNU Affero General Public License v3.0, the same license as [GADS](https://github.com/shamanec/GADS). See [LICENSE](LICENSE).
