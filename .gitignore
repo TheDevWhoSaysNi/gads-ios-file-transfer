@@ -1,0 +1,5 @@
+/gads-file-transfer
+/gads-file-transfer.exe
+/ios/build/
+/ios/*.ipa
+.DS_Store

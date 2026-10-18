@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GADS File Transfer</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      font: 16px/1.45 ui-sans-serif, system-ui, sans-serif;
+      background: #f4f1ea;
+      color: #1c1915;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #161410; color: #f4f1ea; }
+      .card { background: #221e18; border-color: #3a342b; }
+      input, select, button { border-color: #3a342b; }
+    }
+    main { max-width: 32rem; margin: 4rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.6rem; margin: 0 0 .4rem; }
+    p { margin: 0 0 1rem; }
+    .card {
+      background: white;
+      border: 1px solid #e4ddd0;
+      border-radius: 16px;
+      padding: 1.25rem;
+      display: grid;
+      gap: .75rem;
+    }
+    label { font-size: .85rem; font-weight: 600; }
+    input, select, button {
+      font: inherit;
+      border: 1px solid #e4ddd0;
+      border-radius: 10px;
+      padding: .55rem .7rem;
+      background: transparent;
+      color: inherit;
+    }
+    button { background: #1c1915; color: #f4f1ea; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; }
+    .muted { color: #6d6458; font-size: .9rem; }
+    .ok { color: #0d6b3a; }
+    .bad { color: #9d1c1c; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>GADS File Transfer</h1>
+    <p class="muted">Photos and videos land in Photos and in Files. Anything else lands in Files.</p>
+    <form class="card" id="form">
+      <label id="token-label" hidden>
+        Access token
+        <input id="token" type="password" autocomplete="current-password" />
+      </label>
+      <label>
+        Phone
+        <select id="device" required></select>
+      </label>
+      <label>
+        File
+        <input id="file" type="file" required />
+      </label>
+      <button id="send" type="submit">Send to phone</button>
+      <p id="result" class="muted" role="status"></p>
+    </form>
+  </main>
+  <script>
+    const requireToken = __REQUIRE_TOKEN__;
+    const tokenLabel = document.querySelector("#token-label");
+    const tokenInput = document.querySelector("#token");
+    const device = document.querySelector("#device");
+    const form = document.querySelector("#form");
+    const result = document.querySelector("#result");
+    const send = document.querySelector("#send");
+    if (requireToken) tokenLabel.hidden = false;
+
+    function headers() {
+      const headers = {};
+      const token = tokenInput.value.trim();
+      if (token) headers.authorization = "Bearer " + token;
+      return headers;
+    }
+
+    async function loadDevices() {
+      device.innerHTML = "";
+      const res = await fetch("/api/devices", { headers: headers() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Could not list phones");
+      const list = body.devices || [];
+      if (list.length === 0) {
+        const opt = document.createElement("option");
+        opt.textContent = "No phone connected";
+        opt.value = "";
+        device.append(opt);
+        return;
+      }
+      for (const item of list) {
+        const opt = document.createElement("option");
+        opt.value = item.udid;
+        opt.textContent = item.version ? item.name + " · iOS " + item.version : item.name;
+        device.append(opt);
+      }
+    }
+
+    tokenInput.addEventListener("change", () => loadDevices().catch((err) => {
+      result.textContent = err.message;
+      result.className = "bad";
+    }));
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const file = document.querySelector("#file").files[0];
+      if (!file || !device.value) return;
+      send.disabled = true;
+      result.className = "muted";
+      result.textContent = "Copying " + file.name + "…";
+      try {
+        const body = new FormData();
+        body.set("udid", device.value);
+        body.set("file", file);
+        const res = await fetch("/api/push", { method: "POST", headers: headers(), body });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload.error || "Send failed");
+        const where = {
+          "photos-and-files": "Photos and Files",
+          files: "Files",
+        }[payload.where] || payload.where;
+        result.className = payload.message ? "bad" : "ok";
+        result.textContent = file.name + " is in " + where + (payload.message ? ". " + payload.message : ".");
+      } catch (err) {
+        result.className = "bad";
+        result.textContent = err.message;
+      } finally {
+        send.disabled = false;
+      }
+    });
+
+    loadDevices().catch((err) => {
+      result.textContent = err.message;
+      result.className = "bad";
+    });
+  </script>
+</body>
+</html>
